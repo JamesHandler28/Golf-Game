@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Golf Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <!-- Add Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            display: block;
+        }
+        #nameInputContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            display: none;
+            z-index: 100;
+            text-align: center;
+        }
+        input, button {
+            margin: 10px;
+            padding: 8px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+    <script src="sketch.js"></script>
+</head>
+<body>
+    <!-- Name input form for leaderboard -->
+    <div id="nameInputContainer">
+        <h2>Congratulations!</h2>
+        <p id="finalScoreDisplay">Your final score: </p>
+        <p>Enter your name for the leaderboard:</p>
+        <input type="text" id="playerNameInput" maxlength="20" placeholder="Your Name">
+        <div>
+            <button id="submitScoreBtn">Submit Score</button>
+            <button id="skipLeaderboardBtn">Skip</button>
+        </div>
+    </div>
+</body>
+</html>
