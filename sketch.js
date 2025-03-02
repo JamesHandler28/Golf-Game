@@ -35,6 +35,7 @@ let last_shot_x = 100;      // X position of the last shot
 let last_shot_y;            // Y position of the last shot
 let sink_timer = 0;         // Timer for sinking animation
 let sink_duration = 60;     // Duration of sinking animation (in frames)
+let max_ball_height = -2000; // Maximum height the ball can reach before resetting
 
 // Course variables
 let current_hole = 1;       // Current hole number (1-18)
@@ -1825,9 +1826,18 @@ function draw() {
   ellipse(club_x, club_y, club_radius * 2);
   
   // Update ball physics based on state
-  if (ball_state === 'in_air') {
+  if (ball_state === 'in_air' || ball_state === 'rolling') {
     // Apply gravity
     ball_vy += gravity;
+    
+    // Check if ball has gone too high
+    if (ball_y < max_ball_height) {
+      // Ball went too high, treat it like a water hazard but with a different message
+      ball_state = 'in_water';
+      in_hazard = true;
+      hazard_type = 'out_of_bounds';
+      sink_timer = 0;
+    }
     
     // Store previous position for collision detection
     let prev_ball_y = ball_y;
@@ -2076,6 +2086,113 @@ function draw() {
       // Change state to idle so the player can hit it
       ball_state = 'idle';
     }
+  } else if (ball_state === 'in_air') {
+    // Apply gravity
+    ball_vy += gravity;
+    
+    // Check if ball has gone too high
+    if (ball_y < max_ball_height) {
+      // Ball went too high, treat it like a water hazard but with a different message
+      ball_state = 'in_water';
+      in_hazard = true;
+      hazard_type = 'out_of_bounds';
+      sink_timer = 0;
+    }
+    
+    // Store previous position for collision detection
+    let prev_ball_y = ball_y;
+    
+    // Update position
+    ball_x += ball_vx;
+    ball_y += ball_vy;
+    
+    // Check for collision with walls
+    if (ball_x - ball_radius < left_wall) {
+      ball_x = left_wall + ball_radius;
+      ball_vx *= -wall_bounce;  // Bounce with energy loss
+    } else if (ball_x + ball_radius > right_wall) {
+      ball_x = right_wall - ball_radius;
+      ball_vx *= -wall_bounce;  // Bounce with energy loss
+    }
+    
+    // Check for water and sand hazards first
+    checkHazardCollisions();
+    
+    // Only check other collisions if we're not in a hazard
+    if (ball_state !== 'in_water' && ball_state !== 'in_sand') {
+      // Check for collision with obstacles
+      checkObstacleCollisions();
+      
+      // Check if the ball is above the hole and moving downward
+      if (isAboveHole(ball_x) && ball_y + ball_radius >= hole_y && ball_y < hole_y + hole_depth && ball_vy > 0) {
+        // Only fall in if the ball is moving slowly enough horizontally
+        if (abs(ball_vx) < 3) {
+          // Ball is above the hole, let it fall in
+          ball_state = 'in_hole';
+          ball_y = hole_y;  // Position the ball at the top of the hole
+          ball_vy = 0.5;    // Give it a small downward velocity
+        } else {
+          // Ball is moving too fast, bounce over the hole
+          ball_y = hole_y - ball_radius;
+          ball_vy *= -0.5;  // Reduced bounce
+          ball_vx *= 0.8;   // Slow down horizontally
+        }
+      } 
+      // Check if the ball hits a platform
+      else {
+        // Check if the ball crossed a platform boundary during this frame
+        let platformAtBall = getPlatformAtPosition(ball_x, ball_y + ball_radius);
+        
+        // If no platform found at current position, check if we passed through one
+        if (!platformAtBall && ball_vy > 0) {
+          // Check if the ball was above a platform in the previous frame
+          let platformAtPrevPos = getPlatformAtPosition(ball_x, prev_ball_y + ball_radius);
+          if (platformAtPrevPos) {
+            // Ball passed through a platform, place it on top
+            platformAtBall = platformAtPrevPos;
+          }
+        }
+        
+        if (platformAtBall) {
+          ball_y = platformAtBall.y - ball_radius;
+          
+          // Add a small bounce if the ball is falling with enough velocity
+          if (ball_vy > 1) {
+            ball_vy = -ball_vy * grass_bounce; // Apply a small bounce
+            ball_state = 'in_air'; // Keep the ball in the air state
+          } else {
+            // If the ball is moving slowly, just stop it
+            ball_vy = 0;
+            ball_state = 'rolling';
+          }
+        }
+        
+        // Special check for ground collision
+    if (ball_y + ball_radius > ground_y) {
+      ball_y = ground_y - ball_radius;
+          
+          // Add a small bounce if the ball is falling with enough velocity
+          if (ball_vy > 1) {
+            ball_vy = -ball_vy * grass_bounce; // Apply a small bounce
+            ball_state = 'in_air'; // Keep the ball in the air state
+          } else {
+            // If the ball is moving slowly, just stop it
+            ball_vy = 0;
+            ball_state = 'rolling';
+          }
+        }
+        
+        // Check if ball falls below the screen
+        if (ball_y > ground_y + 100) {
+          // Reset ball position
+          ball_x = 100;
+          ball_y = ground_y - ball_radius;
+          ball_vx = 0;
+          ball_vy = 0;
+          ball_state = 'idle';
+        }
+      }
+    }
   }
   
   // Update moving obstacles
@@ -2103,6 +2220,16 @@ function draw() {
       text("Ball in water! +1 stroke penalty", width / 2 - 120, 30);
     } else if (hazard_type === 'sand') {
       text("Ball in sand! Reduced power", width / 2 - 100, 30);
+    } else if (hazard_type === 'out_of_bounds') {
+      // Add a background for better visibility
+      noStroke();
+      fill(0, 0, 0, 100);
+      rect(width / 2 - 200, 10, 400, 30);
+      
+      // Draw the text
+      fill(255, 0, 0);
+      textSize(22); // Slightly larger text
+      text("OUT OF BOUNDS! Ball will reset with penalty stroke", width / 2 - 190, 30);
     }
   }
   
@@ -2160,6 +2287,16 @@ function draw() {
     } else if (hazard_type === 'sand') {
       fill(240, 230, 140);
       text("IN SAND! Ball is stuck, shot power reduced by 50%", width / 2 - 180, 20);
+    } else if (hazard_type === 'out_of_bounds') {
+      // Add a background for better visibility
+      noStroke();
+      fill(0, 0, 0, 100);
+      rect(width / 2 - 200, 10, 400, 30);
+      
+      // Draw the text
+      fill(255, 0, 0);
+      textSize(22); // Slightly larger text
+      text("OUT OF BOUNDS! Ball will reset with penalty stroke", width / 2 - 190, 30);
     }
   }
   
