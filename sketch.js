@@ -37,6 +37,12 @@ let sink_timer = 0;         // Timer for sinking animation
 let sink_duration = 60;     // Duration of sinking animation (in frames)
 let max_ball_height = -2000; // Maximum height the ball can reach before resetting
 
+// Responsive design variables
+let canvas_width = 800;     // Default canvas width
+let canvas_height = 600;    // Default canvas height
+let scale_factor = 1;       // Scale factor for responsive elements
+let is_mobile = false;      // Flag to check if device is mobile
+
 // Course variables
 let current_hole = 1;       // Current hole number (1-18)
 let total_holes = 18;       // Total number of holes in the course
@@ -69,11 +75,32 @@ let camera_y = 0;           // Camera y offset for scrolling
 let target_camera_y = 0;    // Target camera position for smooth scrolling
 
 function setup() {
-  // Create the canvas
-  createCanvas(800, 600);
+  // Create a responsive canvas
+  if (windowWidth < 600) {
+    // Mobile device
+    is_mobile = true;
+    canvas_width = windowWidth;
+    canvas_height = windowHeight;
+    scale_factor = canvas_width / 800; // Calculate scale based on default width
+  } else {
+    // Desktop or tablet
+    canvas_width = min(windowWidth * 0.95, 800);
+    canvas_height = min(windowHeight * 0.95, 600);
+    scale_factor = canvas_width / 800;
+  }
+  
+  createCanvas(canvas_width, canvas_height);
+  
+  // Adjust game elements based on canvas size
+  ground_y = canvas_height - 50;
+  ball_radius = 10 * scale_factor;
+  hole_width = 30 * scale_factor;
+  hole_depth = 20 * scale_factor;
+  max_ball_height = -canvas_height * 3; // Adjust out-of-bounds height
   
   // Set the initial y position of the ball to rest on the ground
   ball_y = ground_y - ball_radius;
+  last_shot_y = ball_y;
   
   // Initialize club position
   club_x = mouseX;
@@ -244,91 +271,70 @@ async function fetchLeaderboard() {
 
 // Function to draw the leaderboard
 function drawLeaderboard() {
-  background(240, 240, 200);
+  background(50, 50, 100);
   
   // Title
-  fill(0);
-  textSize(32);
-  text("LEADERBOARD", width / 2 - 120, 50);
+  fill(255);
+  textSize(32 * scale_factor);
+  text("LEADERBOARD", canvas_width / 2 - 120 * scale_factor, 50 * scale_factor);
   
-  // If leaderboard hasn't been fetched yet, show loading message
-  if (!leaderboardFetched) {
-    textSize(18);
-    text("Loading leaderboard...", width / 2 - 100, height / 2);
-    return;
-  }
+  // Draw leaderboard entries
+  let startY = 100 * scale_factor;
+  let rowHeight = 40 * scale_factor;
   
-  // If leaderboard is empty, show message
+  // Header row
+  fill(100, 100, 150);
+  rect(50 * scale_factor, startY, canvas_width - 100 * scale_factor, rowHeight);
+  fill(255);
+  textSize(16 * scale_factor);
+  text("Rank", 70 * scale_factor, startY + 25 * scale_factor);
+  text("Player", 150 * scale_factor, startY + 25 * scale_factor);
+  text("Score", canvas_width - 200 * scale_factor, startY + 25 * scale_factor);
+  text("vs Par", canvas_width - 100 * scale_factor, startY + 25 * scale_factor);
+  
+  startY += rowHeight;
+  
+  // Check if leaderboard is empty
   if (leaderboard.length === 0) {
-    textSize(18);
-    text("No scores yet. Be the first to submit!", width / 2 - 150, height / 2);
+    fill(255);
+    textSize(18 * scale_factor);
+    text("No scores yet. Be the first to submit!", canvas_width / 2 - 150 * scale_factor, startY + 40 * scale_factor);
   } else {
-    // Draw table headers
-    textSize(16);
-    fill(0);
-    text("Rank", 50, 100);
-    text("Player", 150, 100);
-    text("Score", 350, 100);
-    text("To Par", 450, 100);
-    text("Date", 550, 100);
-    
-    // Draw horizontal line
-    stroke(0);
-    line(30, 110, width - 30, 110);
-    noStroke();
-    
-    // Draw leaderboard entries
-    for (let i = 0; i < leaderboard.length; i++) {
-      const entry = leaderboard[i];
-      const y = 140 + (i * 30);
+    // Draw each leaderboard entry
+    for (let i = 0; i < min(leaderboard.length, 10); i++) {
+      // Alternate row colors
+      if (i % 2 === 0) {
+        fill(70, 70, 120);
+      } else {
+        fill(60, 60, 100);
+      }
+      rect(50 * scale_factor, startY, canvas_width - 100 * scale_factor, rowHeight);
       
-      // Highlight the current player
-      if (entry.player_name === playerName) {
-        fill(220, 220, 255);
-        rect(30, y - 20, width - 60, 25);
+      // Draw rank, player name, score, and relative to par
+      fill(255);
+      textSize(16 * scale_factor);
+      text("#" + (i + 1), 70 * scale_factor, startY + 25 * scale_factor);
+      text(leaderboard[i].player_name, 150 * scale_factor, startY + 25 * scale_factor);
+      text(leaderboard[i].total_score, canvas_width - 200 * scale_factor, startY + 25 * scale_factor);
+      
+      // Format relative to par with + sign for over par
+      let relToPar = leaderboard[i].relative_to_par;
+      if (relToPar > 0) {
+        text("+" + relToPar, canvas_width - 100 * scale_factor, startY + 25 * scale_factor);
+      } else {
+        text(relToPar, canvas_width - 100 * scale_factor, startY + 25 * scale_factor);
       }
       
-      fill(0);
-      textAlign(LEFT);
-      
-      // Rank
-      text(`${i + 1}`, 50, y);
-      
-      // Player name
-      text(entry.player_name, 150, y);
-      
-      // Score
-      text(entry.total_score, 350, y);
-      
-      // Score relative to par
-      let parText = entry.relative_to_par === 0 ? "Even" : 
-                   (entry.relative_to_par > 0 ? "+" + entry.relative_to_par : entry.relative_to_par);
-      
-      // Color code the score
-      if (entry.relative_to_par < 0) fill(0, 150, 0);
-      else if (entry.relative_to_par === 0) fill(0);
-      else fill(150, 0, 0);
-      
-      text(parText, 450, y);
-      fill(0);
-      
-      // Date
-      const date = new Date(entry.date_played);
-      const dateStr = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-      text(dateStr, 550, y);
+      startY += rowHeight;
     }
   }
   
-  // Back button
-  fill(50, 50, 200);
-  rect(width / 2 - 80, height - 60, 160, 40);
+  // Draw back button
+  fill(100, 100, 200);
+  rect(canvas_width / 2 - 80 * scale_factor, canvas_height - 60 * scale_factor, 160 * scale_factor, 40 * scale_factor, 10 * scale_factor);
   fill(255);
-  textSize(20);
-  textAlign(CENTER);
-  text("Back to Game", width / 2, height - 35);
-  
-  // Reset text alignment
-  textAlign(LEFT);
+  textSize(16 * scale_factor);
+  text("Back to Scorecard", canvas_width / 2 - 70 * scale_factor, canvas_height - 35 * scale_factor);
 }
 
 // Setup a specific hole based on hole number
@@ -1708,6 +1714,37 @@ function setupHole(hole_number) {
 }
 
 function draw() {
+  // Clear the canvas
+  background(120, 200, 100); // Green background for grass
+  
+  // Update moving obstacles
+  updateMovingObstacles();
+  
+  // Update camera position
+  updateCamera();
+  
+  // Draw the sky
+  fill(135, 206, 235);
+  rect(0, 0, canvas_width, ground_y - 100);
+  
+  // Draw clouds
+  fill(255);
+  noStroke();
+  // Cloud 1
+  ellipse(100 * scale_factor, 100 * scale_factor, 60 * scale_factor, 40 * scale_factor);
+  ellipse(130 * scale_factor, 90 * scale_factor, 70 * scale_factor, 50 * scale_factor);
+  ellipse(160 * scale_factor, 100 * scale_factor, 60 * scale_factor, 40 * scale_factor);
+  
+  // Cloud 2
+  ellipse(400 * scale_factor, 70 * scale_factor, 50 * scale_factor, 30 * scale_factor);
+  ellipse(430 * scale_factor, 60 * scale_factor, 60 * scale_factor, 40 * scale_factor);
+  ellipse(460 * scale_factor, 70 * scale_factor, 50 * scale_factor, 30 * scale_factor);
+  
+  // Cloud 3
+  ellipse(700 * scale_factor, 120 * scale_factor, 70 * scale_factor, 50 * scale_factor);
+  ellipse(740 * scale_factor, 110 * scale_factor, 80 * scale_factor, 60 * scale_factor);
+  ellipse(780 * scale_factor, 120 * scale_factor, 70 * scale_factor, 50 * scale_factor);
+  
   // Check if we should show the name input form
   if (showNameInput) {
     // Don't draw anything while the name input form is showing
@@ -1725,12 +1762,6 @@ function draw() {
     drawScorecard();
     return;
   }
-  
-  // Update camera position to follow the ball
-  updateCamera();
-  
-  // Draw the sky (light blue)
-  background(135, 206, 235);
   
   // Apply camera transformation
   push();
@@ -2195,41 +2226,40 @@ function draw() {
     }
   }
   
-  // Update moving obstacles
-  updateMovingObstacles();
-  
   // Display the shot count and hole information
   fill(0);
-  textSize(16);
-  text("Hole: " + current_hole + " / " + total_holes, 10, 20);
-  text("Par: " + hole_pars[current_hole - 1], 10, 45);
-  text("Shots: " + shot_count, 10, 70);
+  textSize(16 * scale_factor);
+  text("Hole: " + current_hole + " / " + total_holes, 10 * scale_factor, 30 * scale_factor);
+  text("Par: " + hole_pars[current_hole - 1], 10 * scale_factor, 50 * scale_factor);
+  text("Shots: " + shot_count, 10 * scale_factor, 70 * scale_factor);
   
-  // Display scorecard button
-  fill(50, 50, 200);
-  rect(width - 100, 30, 90, 30);
-  fill(255);
-  textSize(14);
-  text("Scorecard", width - 90, 50);
+  // Draw scorecard button
+  fill(200);
+  rect(canvas_width - 100 * scale_factor, 30 * scale_factor, 90 * scale_factor, 30 * scale_factor, 5 * scale_factor);
+  fill(0);
+  textSize(14 * scale_factor);
+  text("Scorecard", canvas_width - 90 * scale_factor, 50 * scale_factor);
   
   // Display hazard information if the ball is in a hazard
   if (in_hazard) {
     fill(255, 0, 0);
-    textSize(18);
+    textSize(20 * scale_factor);
     if (hazard_type === 'water') {
-      text("Ball in water! +1 stroke penalty", width / 2 - 120, 30);
+      fill(0, 100, 255);
+      text("IN WATER! Ball will reset with penalty stroke", canvas_width / 2 - 180 * scale_factor, 20 * scale_factor);
     } else if (hazard_type === 'sand') {
-      text("Ball in sand! Reduced power", width / 2 - 100, 30);
+      fill(240, 230, 140);
+      text("IN SAND! Ball is stuck, shot power reduced by 50%", canvas_width / 2 - 180 * scale_factor, 20 * scale_factor);
     } else if (hazard_type === 'out_of_bounds') {
       // Add a background for better visibility
       noStroke();
       fill(0, 0, 0, 100);
-      rect(width / 2 - 200, 10, 400, 30);
+      rect(canvas_width / 2 - 200 * scale_factor, 10 * scale_factor, 400 * scale_factor, 30 * scale_factor);
       
       // Draw the text
       fill(255, 0, 0);
-      textSize(22); // Slightly larger text
-      text("OUT OF BOUNDS! Ball will reset with penalty stroke", width / 2 - 190, 30);
+      textSize(22 * scale_factor); // Slightly larger text
+      text("OUT OF BOUNDS! Ball will reset with penalty stroke", canvas_width / 2 - 190 * scale_factor, 30 * scale_factor);
     }
   }
   
@@ -2239,41 +2269,24 @@ function draw() {
     hole_scores[current_hole - 1] = shot_count;
     
     fill(0, 0, 0, 150);
-    rect(0, 0, width, height);
+    rect(0, 0, canvas_width, canvas_height);
     
     fill(255);
-    textSize(32);
-    text("Hole " + current_hole + " Complete!", width / 2 - 150, height / 2 - 80);
-    textSize(24);
-    text("Shots: " + shot_count + " (Par: " + hole_pars[current_hole - 1] + ")", width / 2 - 120, height / 2 - 40);
+    textSize(32 * scale_factor);
+    text("Hole Complete!", canvas_width / 2 - 120 * scale_factor, canvas_height / 2 - 20 * scale_factor);
+    textSize(24 * scale_factor);
+    text("Shots: " + shot_count + " (Par: " + hole_pars[current_hole - 1] + ")", canvas_width / 2 - 100 * scale_factor, canvas_height / 2 + 20 * scale_factor);
     
-    // Calculate score relative to par
-    let relativeToPar = shot_count - hole_pars[current_hole - 1];
-    let scoreText;
-    if (relativeToPar < 0) {
-      scoreText = "Birdie";
-      if (relativeToPar < -1) scoreText = "Eagle";
-      if (relativeToPar < -2) scoreText = "Albatross";
-    } else if (relativeToPar === 0) {
-      scoreText = "Par";
-    } else {
-      scoreText = "Bogey";
-      if (relativeToPar > 1) scoreText = "Double Bogey";
-      if (relativeToPar > 2) scoreText = "Triple Bogey";
-    }
-    text(scoreText, width / 2 - 50, height / 2);
-    
-    // Display next hole button
-    fill(50, 200, 50);
-    rect(width / 2 - 80, height / 2 + 40, 160, 40);
-    fill(255);
-    textSize(20);
+    // Draw the next hole button
+    fill(100, 200, 100);
+    rect(canvas_width / 2 - 80 * scale_factor, canvas_height / 2 + 40 * scale_factor, 160 * scale_factor, 40 * scale_factor, 10 * scale_factor);
+    fill(0);
+    textSize(16 * scale_factor);
     
     if (current_hole < total_holes) {
-      text("Next Hole", width / 2 - 50, height / 2 + 65);
+      text("Next Hole", canvas_width / 2 - 40 * scale_factor, canvas_height / 2 + 65 * scale_factor);
     } else {
-      text("View Final Score", width / 2 - 80, height / 2 + 65);
-      game_completed = true;
+      text("View Scorecard", canvas_width / 2 - 60 * scale_factor, canvas_height / 2 + 65 * scale_factor);
     }
   }
   
@@ -2283,20 +2296,20 @@ function draw() {
     textSize(16);
     if (hazard_type === 'water') {
       fill(0, 100, 255);
-      text("IN WATER! Ball will reset to previous position with penalty", width / 2 - 200, 20);
+      text("IN WATER! Ball will reset to previous position with penalty", canvas_width / 2 - 200 * scale_factor, 20 * scale_factor);
     } else if (hazard_type === 'sand') {
       fill(240, 230, 140);
-      text("IN SAND! Ball is stuck, shot power reduced by 50%", width / 2 - 180, 20);
+      text("IN SAND! Ball is stuck, shot power reduced by 50%", canvas_width / 2 - 180 * scale_factor, 20 * scale_factor);
     } else if (hazard_type === 'out_of_bounds') {
       // Add a background for better visibility
       noStroke();
       fill(0, 0, 0, 100);
-      rect(width / 2 - 200, 10, 400, 30);
+      rect(canvas_width / 2 - 200 * scale_factor, 10 * scale_factor, 400 * scale_factor, 30 * scale_factor);
       
       // Draw the text
       fill(255, 0, 0);
       textSize(22); // Slightly larger text
-      text("OUT OF BOUNDS! Ball will reset with penalty stroke", width / 2 - 190, 30);
+      text("OUT OF BOUNDS! Ball will reset with penalty stroke", canvas_width / 2 - 190 * scale_factor, 30 * scale_factor);
     }
   }
   
@@ -2354,10 +2367,16 @@ function draw() {
   
   // Display instructions
   fill(0);
-  textSize(14);
-  text("Click and drag from the ball, then release to shoot.", 10, height - 60);
-  text("Avoid water hazards (blue) - ball resets to previous position with penalty.", 10, height - 40);
-  text("Be careful of sand traps (yellow) - ball gets stuck and shot power is reduced.", 10, height - 20);
+  textSize(14 * scale_factor);
+  if (is_mobile) {
+    // Mobile-specific instructions
+    text("Tap and drag from the ball, then release to shoot.", 10 * scale_factor, canvas_height - 60 * scale_factor);
+  } else {
+    // Desktop instructions
+    text("Click and drag from the ball, then release to shoot.", 10 * scale_factor, canvas_height - 60 * scale_factor);
+  }
+  text("Avoid water hazards (blue) - ball resets with penalty.", 10 * scale_factor, canvas_height - 40 * scale_factor);
+  text("Be careful of sand traps (yellow) - shot power is reduced.", 10 * scale_factor, canvas_height - 20 * scale_factor);
 }
 
 // Draw the scorecard
@@ -2366,126 +2385,186 @@ function drawScorecard() {
   
   // Title
   fill(0);
-  textSize(32);
-  text("SCORECARD", width / 2 - 100, 50);
+  textSize(32 * scale_factor);
+  text("SCORECARD", canvas_width / 2 - 100 * scale_factor, 50 * scale_factor);
   
-  // Calculate layout dimensions
-  let holeWidth = 40;
-  let columnSpacing = 45;
-  let startX = 50;
-  let headerY = 100;
-  let scoreY = 140;
-  let totalY = 200;
-  
-  // Draw table headers
-  textSize(16);
-  text("Hole", startX, headerY);
-  text("Par", startX, headerY + 30);
-  text("Score", startX, headerY + 60);
-  
-  // Draw horizontal line
-  stroke(0);
-  line(30, headerY + 70, width - 30, headerY + 70);
-  noStroke();
-  
-  // Draw scores for each hole horizontally
+  // Calculate front 9, back 9, and total scores
   let front9Par = 0;
   let back9Par = 0;
   let front9Score = 0;
   let back9Score = 0;
-  let totalScore = 0;
   
-  for (let i = 0; i < total_holes; i++) {
-    let x = startX + columnSpacing + (i * holeWidth);
-    
-    // Draw hole number
+  for (let i = 0; i < 9; i++) {
+    front9Par += hole_pars[i];
+    front9Score += hole_scores[i];
+  }
+  
+  for (let i = 9; i < 18; i++) {
+    back9Par += hole_pars[i];
+    back9Score += hole_scores[i];
+  }
+  
+  let totalPar = front9Par + back9Par;
+  let totalScore = front9Score + back9Score;
+  
+  // Draw scorecard grid
+  let cellWidth = min(50 * scale_factor, canvas_width / 12);
+  let cellHeight = 30 * scale_factor;
+  let startX = (canvas_width - cellWidth * 11) / 2;
+  let startY = 100 * scale_factor;
+  
+  // Draw headers
+  fill(200, 230, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Hole header
+  fill(0);
+  textSize(14 * scale_factor);
+  text("Hole", startX + 10 * scale_factor, startY + 20 * scale_factor);
+  
+  // Front 9 headers
+  fill(200, 230, 200);
+  for (let i = 0; i < 9; i++) {
+    rect(startX + cellWidth * (i + 1), startY, cellWidth, cellHeight);
     fill(0);
-    textAlign(CENTER);
-    
-    // Highlight current hole
-    if (i === current_hole - 1 && !game_completed) {
-      fill(0, 100, 0);
-    }
-    
-    text((i + 1), x, headerY);
-    
-    // Draw par
+    text(i + 1, startX + cellWidth * (i + 1) + 20 * scale_factor, startY + 20 * scale_factor);
+    fill(200, 230, 200);
+  }
+  
+  // Out header (front 9 total)
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
+  fill(0);
+  text("OUT", startX + cellWidth * 10 + 15 * scale_factor, startY + 20 * scale_factor);
+  
+  // Draw par row
+  startY += cellHeight;
+  fill(230, 230, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Par header
+  fill(0);
+  text("Par", startX + 10 * scale_factor, startY + 20 * scale_factor);
+  
+  // Front 9 pars
+  fill(230, 230, 200);
+  for (let i = 0; i < 9; i++) {
+    rect(startX + cellWidth * (i + 1), startY, cellWidth, cellHeight);
     fill(0);
-    text(hole_pars[i], x, headerY + 30);
+    text(hole_pars[i], startX + cellWidth * (i + 1) + 20 * scale_factor, startY + 20 * scale_factor);
+    fill(230, 230, 200);
+  }
+  
+  // Front 9 total par
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
+  fill(0);
+  text(front9Par, startX + cellWidth * 10 + 20 * scale_factor, startY + 20 * scale_factor);
+  
+  // Draw score row
+  startY += cellHeight;
+  fill(230, 200, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Score header
+  fill(0);
+  text("Score", startX + 10 * scale_factor, startY + 20 * scale_factor);
+  
+  // Front 9 scores
+  for (let i = 0; i < 9; i++) {
+    fill(230, 200, 200);
+    rect(startX + cellWidth * (i + 1), startY, cellWidth, cellHeight);
     
-    // Track front 9 and back 9 pars
-    if (i < 9) {
-      front9Par += hole_pars[i];
-    } else {
-      back9Par += hole_pars[i];
-    }
-    
-    // Draw score
-    if (i < current_hole || game_completed) {
-      if (hole_scores[i] > 0) {
-        // Color code the score based on performance
-        let relativeToPar = hole_scores[i] - hole_pars[i];
-        if (relativeToPar < 0) fill(0, 150, 0); // Under par (good)
-        else if (relativeToPar === 0) fill(0); // Par
-        else if (relativeToPar === 1) fill(150, 150, 0); // Bogey
-        else fill(150, 0, 0); // Double bogey or worse
-        
-        text(hole_scores[i], x, headerY + 60);
-        
-        // Track front 9 and back 9 scores
-        if (i < 9) {
-          front9Score += hole_scores[i];
-        } else {
-          back9Score += hole_scores[i];
-        }
-        
-        totalScore = front9Score + back9Score;
-      } else {
-        fill(100);
-        text("-", x, headerY + 60);
-      }
-    } else {
-      fill(100);
-      text("-", x, headerY + 60);
+    // Only show scores for holes that have been played
+    if (i < current_hole || (i === current_hole - 1 && game_over)) {
+      fill(0);
+      // Color code scores relative to par
+      if (hole_scores[i] < hole_pars[i]) fill(0, 150, 0); // Under par (good)
+      else if (hole_scores[i] > hole_pars[i]) fill(150, 0, 0); // Over par (bad)
+      text(hole_scores[i], startX + cellWidth * (i + 1) + 20 * scale_factor, startY + 20 * scale_factor);
     }
   }
   
-  // Reset text alignment
-  textAlign(LEFT);
-  
-  // Draw totals
+  // Front 9 total score
+  fill(230, 200, 200);
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
   fill(0);
-  textSize(18);
-  text("Total", startX, totalY);
+  text(front9Score, startX + cellWidth * 10 + 20 * scale_factor, startY + 20 * scale_factor);
   
-  textAlign(CENTER);
-  text(front9Par, startX + columnSpacing + (4.5 * holeWidth), totalY); // Front 9 par total
-  text(front9Score > 0 ? front9Score : "-", startX + columnSpacing + (4.5 * holeWidth), totalY + 30); // Front 9 score
+  // Add some space before back 9
+  startY += cellHeight * 1.5;
   
-  text(back9Par, startX + columnSpacing + (13.5 * holeWidth), totalY); // Back 9 par total
-  text(back9Score > 0 ? back9Score : "-", startX + columnSpacing + (13.5 * holeWidth), totalY + 30); // Back 9 score
-  
-  // Draw front 9, back 9 labels
+  // Back 9 headers
+  fill(200, 230, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Hole header
   fill(0);
-  textSize(16);
-  text("Front 9", startX + columnSpacing + (4.5 * holeWidth), totalY - 30);
-  text("Back 9", startX + columnSpacing + (13.5 * holeWidth), totalY - 30);
+  text("Hole", startX + 10 * scale_factor, startY + 20 * scale_factor);
   
-  // Draw vertical separator between front 9 and back 9
-  stroke(0);
-  line(startX + columnSpacing + (9 * holeWidth) - holeWidth/2, headerY - 10, 
-       startX + columnSpacing + (9 * holeWidth) - holeWidth/2, totalY + 40);
-  noStroke();
+  // Back 9 hole numbers
+  fill(200, 230, 200);
+  for (let i = 0; i < 9; i++) {
+    rect(startX + cellWidth * (i + 1), startY, cellWidth, cellHeight);
+    fill(0);
+    text(i + 10, startX + cellWidth * (i + 1) + 20 * scale_factor, startY + 20 * scale_factor);
+    fill(200, 230, 200);
+  }
   
-  // Draw total score
+  // In header (back 9 total)
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
   fill(0);
+  text("IN", startX + cellWidth * 10 + 15 * scale_factor, startY + 20 * scale_factor);
+  
+  // Draw par row for back 9
+  startY += cellHeight;
+  fill(230, 230, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Par header
+  fill(0);
+  text("Par", startX + 10 * scale_factor, startY + 20 * scale_factor);
+  
+  // Back 9 pars
+  fill(230, 230, 200);
+  for (let i = 9; i < 18; i++) {
+    rect(startX + cellWidth * (i - 8), startY, cellWidth, cellHeight);
+    fill(0);
+    text(hole_pars[i], startX + cellWidth * (i - 8) + 20 * scale_factor, startY + 20 * scale_factor);
+    fill(230, 230, 200);
+  }
+  
+  // Back 9 total par
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
+  fill(0);
+  text(back9Par, startX + cellWidth * 10 + 20 * scale_factor, startY + 20 * scale_factor);
+  
+  // Draw score row for back 9
+  startY += cellHeight;
+  fill(230, 200, 200);
+  rect(startX, startY, cellWidth, cellHeight); // Score header
+  fill(0);
+  text("Score", startX + 10 * scale_factor, startY + 20 * scale_factor);
+  
+  // Back 9 scores
+  for (let i = 9; i < 18; i++) {
+    fill(230, 200, 200);
+    rect(startX + cellWidth * (i - 8), startY, cellWidth, cellHeight);
+    
+    // Only show scores for holes that have been played
+    if (i < current_hole || (i === current_hole - 1 && game_over)) {
+      fill(0);
+      // Color code scores relative to par
+      if (hole_scores[i] < hole_pars[i]) fill(0, 150, 0); // Under par (good)
+      else if (hole_scores[i] > hole_pars[i]) fill(150, 0, 0); // Over par (bad)
+      text(hole_scores[i], startX + cellWidth * (i - 8) + 20 * scale_factor, startY + 20 * scale_factor);
+    }
+  }
+  
+  // Back 9 total score
+  fill(230, 200, 200);
+  rect(startX + cellWidth * 10, startY, cellWidth, cellHeight);
+  fill(0);
+  text(back9Score, startX + cellWidth * 10 + 20 * scale_factor, startY + 20 * scale_factor);
+  
+  // Total score section
+  startY += cellHeight * 1.5;
+  
+  // Draw total score box
   textSize(20);
   textAlign(LEFT);
   text("TOTAL SCORE:", 50, totalY + 70);
   text(totalScore > 0 ? totalScore : "-", 200, totalY + 70);
   
   // Calculate total score relative to par
-  let totalPar = front9Par + back9Par;
   let totalRelativeToPar = totalScore - totalPar;
   let totalScoreText = totalRelativeToPar === 0 ? "Even" : (totalRelativeToPar > 0 ? "+" + totalRelativeToPar : totalRelativeToPar);
   text("TO PAR:", 300, totalY + 70);
@@ -2959,11 +3038,15 @@ function updateCamera() {
 
 // Handle mouse press to start dragging
 function mousePressed() {
+  // Normalize touch/mouse position for mobile
+  let mx = mouseX;
+  let my = mouseY;
+  
   // Check if we're in leaderboard view
   if (showLeaderboard) {
     // Check if back button is clicked
-    if (mouseX > width / 2 - 80 && mouseX < width / 2 + 80 &&
-        mouseY > height - 60 && mouseY < height - 20) {
+    if (mx > canvas_width / 2 - 80 * scale_factor && mx < canvas_width / 2 + 80 * scale_factor &&
+        my > canvas_height - 60 * scale_factor && my < canvas_height - 20 * scale_factor) {
       // Hide leaderboard and return to game or scorecard
       showLeaderboard = false;
       show_scorecard = true;
@@ -2974,8 +3057,8 @@ function mousePressed() {
   // Check if we're in scorecard view
   if (show_scorecard) {
     // Check if continue/play again button is clicked
-    if (mouseX > width / 2 - 80 && mouseX < width / 2 + 80 &&
-        mouseY > height - 60 && mouseY < height - 20) {
+    if (mx > canvas_width / 2 - 80 * scale_factor && mx < canvas_width / 2 + 80 * scale_factor &&
+        my > canvas_height - 60 * scale_factor && my < canvas_height - 20 * scale_factor) {
       if (game_completed) {
         // Start a new game
         current_hole = 1;
@@ -2989,9 +3072,9 @@ function mousePressed() {
       show_scorecard = false;
     }
     
-    // Check if view leaderboard button is clicked (add this button in drawScorecard)
-    if (mouseX > width / 2 - 80 && mouseX < width / 2 + 80 &&
-        mouseY > height - 110 && mouseY < height - 70 && game_completed) {
+    // Check if view leaderboard button is clicked
+    if (mx > canvas_width / 2 - 80 * scale_factor && mx < canvas_width / 2 + 80 * scale_factor &&
+        my > canvas_height - 110 * scale_factor && my < canvas_height - 70 * scale_factor && game_completed) {
       // Fetch and show leaderboard
       fetchLeaderboard();
       show_scorecard = false;
@@ -3003,8 +3086,8 @@ function mousePressed() {
   
   // Check if the game is over and the next hole/view score button is clicked
   if (game_over) {
-    if (mouseX > width / 2 - 80 && mouseX < width / 2 + 80 &&
-        mouseY > height / 2 + 40 && mouseY < height / 2 + 80) {
+    if (mx > canvas_width / 2 - 80 * scale_factor && mx < canvas_width / 2 + 80 * scale_factor &&
+        my > canvas_height / 2 + 40 * scale_factor && my < canvas_height / 2 + 80 * scale_factor) {
       if (current_hole < total_holes) {
         // Move to the next hole
         current_hole++;
@@ -3020,16 +3103,16 @@ function mousePressed() {
   }
   
   // Check if scorecard button is clicked
-  if (mouseX > width - 100 && mouseX < width - 10 &&
-      mouseY > 30 && mouseY < 60) {
+  if (mx > canvas_width - 100 * scale_factor && mx < canvas_width - 10 * scale_factor &&
+      my > 30 * scale_factor && my < 60 * scale_factor) {
     show_scorecard = true;
     return;
   }
   
   // Only allow dragging when the ball is idle or in sand and the mouse is on the ball
-  let mouseWorldY = mouseY + camera_y;
+  let mouseWorldY = my + camera_y;
   if ((ball_state === 'idle' || (in_hazard && hazard_type === 'sand')) && 
-      dist(mouseX, mouseWorldY, ball_x, ball_y) < ball_radius * 2) {
+      dist(mx, mouseWorldY, ball_x, ball_y) < ball_radius * 2) {
     is_dragging = true;
     // Record the position of the last shot
     last_shot_x = ball_x;
@@ -3039,55 +3122,86 @@ function mousePressed() {
 
 // Handle mouse release to shoot the ball
 function mouseReleased() {
+  // Normalize touch/mouse position for mobile
+  let mx = mouseX;
+  let my = mouseY;
+  
   if (is_dragging) {
-    // Save the current position as the last shot position
-    last_shot_x = ball_x;
-    last_shot_y = ball_y;
-    
-    // Calculate velocity based on drag direction (mouse to ball, reversed)
-    let dx = ball_x - mouseX;
-    let dy = ball_y - (mouseY + camera_y);
-    
-    // Calculate the angle of the shot
-    let angle = atan2(dy, dx);
-    
-    // Scale the velocity based on distance (with a maximum power)
-    let distance = sqrt(dx * dx + dy * dy);
-    let maxDistance = 100;
-    let power = min(distance / maxDistance, 1) * 0.2;
-    
-    // Reduce power if in sand
-    if (in_hazard && hazard_type === 'sand') {
-      power *= sand_power_reduction;
-    }
-    
-    // Calculate velocities based on angle and power
-    // This preserves the direction while ensuring the ball gets airborne
-    ball_vx = cos(angle) * power * distance;
-    ball_vy = sin(angle) * power * distance;
-    
-    // Ensure minimum velocity to get the ball moving
-    let minVelocity = 0.5;
-    if (abs(ball_vx) < minVelocity && abs(ball_vy) < minVelocity) {
-      // Scale up both components proportionally to maintain direction
-      let scale = minVelocity / max(abs(ball_vx), abs(ball_vy));
-      ball_vx *= scale;
-      ball_vy *= scale;
-    }
-    
-    // Force the ball into the air state regardless of velocity
-    ball_state = 'in_air';
-    
-    // Increment shot count
-    shot_count++;
-    
-    // Reset dragging state
     is_dragging = false;
     
-    // Reset hazard state if we're leaving it
-    if (in_hazard && hazard_type === 'sand') {
-      in_hazard = false;
-      hazard_type = '';
+    // Only shoot if the ball is idle or in sand
+    if (ball_state === 'idle' || (in_hazard && hazard_type === 'sand')) {
+      // Calculate velocity based on drag direction (mouse to ball, reversed)
+      let dx = ball_x - mx;
+      let dy = ball_y - (my + camera_y);
+      
+      // Calculate the distance for power
+      let distance = sqrt(dx * dx + dy * dy);
+      
+      // Cap the maximum power
+      let max_power = 15 * scale_factor;
+      let power = min(distance / 10, max_power);
+      
+      // Reduce power if in sand
+      if (in_hazard && hazard_type === 'sand') {
+        power *= sand_power_reduction;
+        in_hazard = false;
+        hazard_type = '';
+      }
+      
+      // Set the ball's velocity
+      ball_vx = dx * power / distance;
+      ball_vy = dy * power / distance;
+      
+      // Change ball state to in_air
+      ball_state = 'in_air';
+      
+      // Increment shot count
+      shot_count++;
+      
+      // Record the position of this shot
+      last_shot_x = ball_x;
+      last_shot_y = ball_y;
     }
   }
+}
+
+// Handle window resizing
+function windowResized() {
+  // Recalculate canvas dimensions
+  if (windowWidth < 600) {
+    // Mobile device
+    is_mobile = true;
+    canvas_width = windowWidth;
+    canvas_height = windowHeight;
+    scale_factor = canvas_width / 800;
+  } else {
+    // Desktop or tablet
+    canvas_width = min(windowWidth * 0.95, 800);
+    canvas_height = min(windowHeight * 0.95, 600);
+    scale_factor = canvas_width / 800;
+  }
+  
+  // Resize the canvas
+  resizeCanvas(canvas_width, canvas_height);
+  
+  // Adjust game elements based on new canvas size
+  ground_y = canvas_height - 50;
+  
+  // If the game is in progress, adjust the camera
+  updateCamera();
+}
+
+// Handle touch start (for mobile)
+function touchStarted() {
+  // Call mousePressed to handle the touch the same way as a mouse click
+  mousePressed();
+  return false; // Prevent default behavior
+}
+
+// Handle touch end (for mobile)
+function touchEnded() {
+  // Call mouseReleased to handle the touch release the same way as a mouse release
+  mouseReleased();
+  return false; // Prevent default behavior
 }
