@@ -22,7 +22,7 @@ let hole_y = 50;            // Hole's y position (at the top)
 let hole_width = 30;        // Hole's width (narrower for more challenge)
 let hole_depth = 20;        // Hole's depth
 let gravity = 0.1;          // Gravity acceleration
-let friction = 0.99;        // Friction coefficient
+let friction = 0.90;        // Friction coefficient (reduced from 0.99 to slow down ball more)
 let grass_bounce = 0.1;     // Bounce coefficient for grass (small bounce)
 let ball_state = 'idle';    // Ball's state: 'idle', 'in_air', 'rolling', 'in_hole', 'in_water', 'in_sand'
 let shot_count = 0;         // Number of shots taken
@@ -1772,6 +1772,10 @@ function draw() {
     // Limit the drag vector length for visualization
     let dragLength = sqrt(dragVecX * dragVecX + dragVecY * dragVecY);
     let maxLength = 100;
+    
+    // Hard cap on the maximum distance to match the power calculation
+    dragLength = min(dragLength, 150);
+    
     if (dragLength > maxLength) {
       dragVecX = (dragVecX / dragLength) * maxLength;
       dragVecY = (dragVecY / dragLength) * maxLength;
@@ -1783,10 +1787,41 @@ function draw() {
     line(ball_x, ball_y, ball_x - dragVecX, ball_y - dragVecY);
     noStroke();
     
-    // Draw power indicator
-    let power = min(dragLength / maxLength, 1);
-    fill(255, 0, 0);
-    rect(ball_x - 20, ball_y - 30, 40 * power, 5);
+    // Calculate power using the same formula as in mouseReleased
+    let powerPercentage = min(dragLength / maxLength, 1);
+    let powerCurve = 0.8;
+    let adjustedPower = pow(powerPercentage, powerCurve);
+    
+    // Draw power meter background
+    fill(50, 50, 50, 180);
+    rect(ball_x - 25, ball_y - 40, 50, 10, 5);
+    
+    // Draw power meter fill with gradient color
+    let powerColor;
+    if (adjustedPower < 0.33) {
+      powerColor = color(0, 255, 0); // Green for low power
+    } else if (adjustedPower < 0.66) {
+      powerColor = color(255, 255, 0); // Yellow for medium power
+    } else {
+      powerColor = color(255, 0, 0); // Red for high power
+    }
+    
+    fill(powerColor);
+    rect(ball_x - 25, ball_y - 40, 50 * adjustedPower, 10, 5);
+    
+    // Draw power meter border
+    noFill();
+    stroke(255);
+    strokeWeight(1);
+    rect(ball_x - 25, ball_y - 40, 50, 10, 5);
+    noStroke();
+    
+    // Draw power percentage text
+    fill(255);
+    textSize(12);
+    textAlign(CENTER);
+    text(int(adjustedPower * 100) + "%", ball_x, ball_y - 50);
+    textAlign(LEFT);
   }
   
   // Draw the golf ball (white circle)
@@ -1985,7 +2020,7 @@ function draw() {
       }
       
     // Stop the ball if speed is very low
-    if (abs(ball_vx) < 0.1) {
+    if (abs(ball_vx) < 0.3) {  // Increased from 0.1 to 0.3 to make the ball stop sooner
       ball_vx = 0;
         
         // Check if the ball is directly above the hole when it stops
@@ -2362,29 +2397,76 @@ function draw() {
 
 // Draw the scorecard
 function drawScorecard() {
-  background(240, 240, 200);
+  // Create a gradient background
+  let gradientTop = color(220, 240, 220);
+  let gradientBottom = color(180, 220, 180);
+  for (let y = 0; y < height; y++) {
+    let inter = map(y, 0, height, 0, 1);
+    let c = lerpColor(gradientTop, gradientBottom, inter);
+    stroke(c);
+    line(0, y, width, y);
+  }
+  noStroke();
   
-  // Title
-  fill(0);
-  textSize(32);
+  // Draw a decorative header background
+  fill(50, 120, 50, 180);
+  rect(width / 2 - 150, 20, 300, 60, 10);
+  
+  // Title with shadow effect
+  fill(0, 0, 0, 50);
+  textSize(34);
+  textStyle(BOLD);
+  text("SCORECARD", width / 2 - 97, 53);
+  fill(255);
   text("SCORECARD", width / 2 - 100, 50);
+  textStyle(NORMAL);
+  
+  // Draw a golf ball icon
+  fill(255);
+  ellipse(width / 2 - 130, 50, 25, 25);
+  // Golf ball dimples
+  fill(240);
+  ellipse(width / 2 - 135, 45, 5, 5);
+  ellipse(width / 2 - 125, 45, 5, 5);
+  ellipse(width / 2 - 130, 55, 5, 5);
+  
+  // Draw a golf flag icon
+  fill(255, 50, 50);
+  triangle(width / 2 + 130, 35, width / 2 + 130, 55, width / 2 + 110, 45);
+  stroke(100);
+  strokeWeight(2);
+  line(width / 2 + 130, 35, width / 2 + 130, 65);
+  noStroke();
+  
+  // Draw main scorecard panel with shadow
+  fill(0, 0, 0, 30);
+  rect(33, 93, width - 66, height - 180, 15);
+  fill(255, 255, 255, 220);
+  rect(30, 90, width - 60, height - 180, 15);
   
   // Calculate layout dimensions
   let holeWidth = 40;
   let columnSpacing = 45;
   let startX = 50;
-  let headerY = 100;
-  let scoreY = 140;
-  let totalY = 200;
+  let headerY = 120;
+  let scoreY = 160;
+  let totalY = 220;
   
-  // Draw table headers
+  // Draw table headers with a subtle background
+  fill(230, 240, 230);
+  rect(startX - 20, headerY - 25, width - 60 - startX + 20, 95, 8);
+  
+  fill(50, 100, 50);
   textSize(16);
+  textStyle(BOLD);
   text("Hole", startX, headerY);
   text("Par", startX, headerY + 30);
   text("Score", startX, headerY + 60);
+  textStyle(NORMAL);
   
   // Draw horizontal line
-  stroke(0);
+  stroke(100, 150, 100);
+  strokeWeight(1);
   line(30, headerY + 70, width - 30, headerY + 70);
   noStroke();
   
@@ -2399,18 +2481,23 @@ function drawScorecard() {
     let x = startX + columnSpacing + (i * holeWidth);
     
     // Draw hole number
-    fill(0);
     textAlign(CENTER);
     
-    // Highlight current hole
+    // Highlight current hole with a circle background
     if (i === current_hole - 1 && !game_completed) {
-      fill(0, 100, 0);
+      fill(50, 150, 50, 150);
+      ellipse(x, headerY - 5, 22, 22);
+      fill(255);
+      textStyle(BOLD);
+    } else {
+      fill(50, 80, 50);
     }
     
     text((i + 1), x, headerY);
+    textStyle(NORMAL);
     
     // Draw par
-    fill(0);
+    fill(80, 80, 80);
     text(hole_pars[i], x, headerY + 30);
     
     // Track front 9 and back 9 pars
@@ -2425,12 +2512,25 @@ function drawScorecard() {
       if (hole_scores[i] > 0) {
         // Color code the score based on performance
         let relativeToPar = hole_scores[i] - hole_pars[i];
-        if (relativeToPar < 0) fill(0, 150, 0); // Under par (good)
-        else if (relativeToPar === 0) fill(0); // Par
+        if (relativeToPar < 0) {
+          // Eagle or better
+          fill(0, 150, 0);
+          // Add a circle for eagle or better
+          if (relativeToPar <= -2) {
+            stroke(0, 150, 0);
+            strokeWeight(1);
+            ellipse(x, headerY + 60 - 5, 22, 22);
+            noStroke();
+            fill(255);
+          }
+        }
+        else if (relativeToPar === 0) fill(50, 50, 150); // Par
         else if (relativeToPar === 1) fill(150, 150, 0); // Bogey
         else fill(150, 0, 0); // Double bogey or worse
         
+        textStyle(BOLD);
         text(hole_scores[i], x, headerY + 60);
+        textStyle(NORMAL);
         
         // Track front 9 and back 9 scores
         if (i < 9) {
@@ -2441,11 +2541,11 @@ function drawScorecard() {
         
         totalScore = front9Score + back9Score;
       } else {
-        fill(100);
+        fill(150);
         text("-", x, headerY + 60);
       }
     } else {
-      fill(100);
+      fill(150);
       text("-", x, headerY + 60);
     }
   }
@@ -2453,72 +2553,155 @@ function drawScorecard() {
   // Reset text alignment
   textAlign(LEFT);
   
+  // Draw totals section with background
+  fill(230, 240, 230);
+  rect(startX - 20, totalY - 40, width - 60 - startX + 20, 80, 8);
+  
   // Draw totals
-  fill(0);
+  fill(50, 80, 50);
   textSize(18);
+  textStyle(BOLD);
   text("Total", startX, totalY);
   
   textAlign(CENTER);
   text(front9Par, startX + columnSpacing + (4.5 * holeWidth), totalY); // Front 9 par total
-  text(front9Score > 0 ? front9Score : "-", startX + columnSpacing + (4.5 * holeWidth), totalY + 30); // Front 9 score
   
+  // Front 9 score with color coding
+  if (front9Score > 0) {
+    let front9Diff = front9Score - front9Par;
+    if (front9Diff < 0) fill(0, 150, 0);
+    else if (front9Diff === 0) fill(50, 50, 150);
+    else fill(150, 0, 0);
+    
+    text(front9Score, startX + columnSpacing + (4.5 * holeWidth), totalY + 30);
+  } else {
+    fill(150);
+    text("-", startX + columnSpacing + (4.5 * holeWidth), totalY + 30);
+  }
+  
+  fill(50, 80, 50);
   text(back9Par, startX + columnSpacing + (13.5 * holeWidth), totalY); // Back 9 par total
-  text(back9Score > 0 ? back9Score : "-", startX + columnSpacing + (13.5 * holeWidth), totalY + 30); // Back 9 score
   
-  // Draw front 9, back 9 labels
-  fill(0);
+  // Back 9 score with color coding
+  if (back9Score > 0) {
+    let back9Diff = back9Score - back9Par;
+    if (back9Diff < 0) fill(0, 150, 0);
+    else if (back9Diff === 0) fill(50, 50, 150);
+    else fill(150, 0, 0);
+    
+    text(back9Score, startX + columnSpacing + (13.5 * holeWidth), totalY + 30);
+  } else {
+    fill(150);
+    text("-", startX + columnSpacing + (13.5 * holeWidth), totalY + 30);
+  }
+  
+  // Draw front 9, back 9 labels with decorative elements
+  fill(50, 100, 50);
   textSize(16);
   text("Front 9", startX + columnSpacing + (4.5 * holeWidth), totalY - 30);
   text("Back 9", startX + columnSpacing + (13.5 * holeWidth), totalY - 30);
   
   // Draw vertical separator between front 9 and back 9
-  stroke(0);
-  line(startX + columnSpacing + (9 * holeWidth) - holeWidth/2, headerY - 10, 
+  stroke(100, 150, 100);
+  strokeWeight(2);
+  line(startX + columnSpacing + (9 * holeWidth) - holeWidth/2, headerY - 20, 
        startX + columnSpacing + (9 * holeWidth) - holeWidth/2, totalY + 40);
   noStroke();
   
+  // Draw total score section with background
+  fill(220, 230, 220);
+  rect(40, totalY + 50, width - 80, 40, 8);
+  
   // Draw total score
-  fill(0);
+  fill(50, 80, 50);
   textSize(20);
   textAlign(LEFT);
-  text("TOTAL SCORE:", 50, totalY + 70);
-  text(totalScore > 0 ? totalScore : "-", 200, totalY + 70);
+  textStyle(BOLD);
+  text("TOTAL SCORE:", 60, totalY + 75);
+  
+  // Total score with color coding
+  if (totalScore > 0) {
+    let totalPar = front9Par + back9Par;
+    let totalRelativeToPar = totalScore - totalPar;
+    
+    if (totalRelativeToPar < 0) fill(0, 150, 0);
+    else if (totalRelativeToPar === 0) fill(50, 50, 150);
+    else fill(150, 0, 0);
+    
+    text(totalScore, 220, totalY + 75);
+  } else {
+    fill(150);
+    text("-", 220, totalY + 75);
+  }
   
   // Calculate total score relative to par
   let totalPar = front9Par + back9Par;
   let totalRelativeToPar = totalScore - totalPar;
   let totalScoreText = totalRelativeToPar === 0 ? "Even" : (totalRelativeToPar > 0 ? "+" + totalRelativeToPar : totalRelativeToPar);
-  text("TO PAR:", 300, totalY + 70);
+  
+  fill(50, 80, 50);
+  text("TO PAR:", 300, totalY + 75);
   
   // Color code the total score
   if (totalRelativeToPar < 0) fill(0, 150, 0);
-  else if (totalRelativeToPar === 0) fill(0);
+  else if (totalRelativeToPar === 0) fill(50, 50, 150);
   else fill(150, 0, 0);
   
-  text(totalScore > 0 ? totalScoreText : "-", 400, totalY + 70);
+  if (totalScore > 0) {
+    text(totalScoreText, 400, totalY + 75);
+  } else {
+    fill(150);
+    text("-", 400, totalY + 75);
+  }
+  textStyle(NORMAL);
   
-  // Draw buttons
-  // Continue button
-  fill(50, 200, 50);
-  rect(width / 2 - 80, height - 60, 160, 40);
+  // Draw buttons with improved styling
+  // Continue button with gradient and shadow
+  let buttonY = height - 60;
+  fill(0, 0, 0, 30);
+  rect(width / 2 - 77, buttonY + 3, 154, 40, 20);
+  
+  // Gradient for button
+  for (let y = 0; y < 40; y++) {
+    let inter = map(y, 0, 40, 0, 1);
+    let c = lerpColor(color(80, 200, 80), color(40, 160, 40), inter);
+    stroke(c);
+    line(width / 2 - 75 + 1, buttonY + y, width / 2 + 75 - 1, buttonY + y);
+  }
+  noStroke();
+  
+  // Button text
   fill(255);
   textSize(20);
   textAlign(CENTER);
+  textStyle(BOLD);
   
   if (game_completed) {
-    text("Play Again", width / 2, height - 35);
+    text("Play Again", width / 2, buttonY + 25);
     
     // Add leaderboard button when game is completed
-    fill(50, 50, 200);
-    rect(width / 2 - 80, height - 110, 160, 40);
+    buttonY = height - 110;
+    fill(0, 0, 0, 30);
+    rect(width / 2 - 77, buttonY + 3, 154, 40, 20);
+    
+    // Gradient for leaderboard button
+    for (let y = 0; y < 40; y++) {
+      let inter = map(y, 0, 40, 0, 1);
+      let c = lerpColor(color(80, 80, 200), color(40, 40, 160), inter);
+      stroke(c);
+      line(width / 2 - 75 + 1, buttonY + y, width / 2 + 75 - 1, buttonY + y);
+    }
+    noStroke();
+    
     fill(255);
-    text("Leaderboard", width / 2, height - 85);
+    text("Leaderboard", width / 2, buttonY + 25);
   } else {
-    text("Continue", width / 2, height - 35);
+    text("Continue", width / 2, buttonY + 25);
   }
   
-  // Reset text alignment
+  // Reset text alignment and style
   textAlign(LEFT);
+  textStyle(NORMAL);
 }
 
 // Check if the ball's x position is above the hole
@@ -3054,7 +3237,18 @@ function mouseReleased() {
     // Scale the velocity based on distance (with a maximum power)
     let distance = sqrt(dx * dx + dy * dy);
     let maxDistance = 100;
-    let power = min(distance / maxDistance, 1) * 0.2;
+    
+    // Add a hard cap on the maximum distance to limit power
+    distance = min(distance, 150);
+    
+    // Create a non-linear power curve that makes it harder to reach max power
+    // This gives more control in the mid-range while capping maximum power
+    let powerPercentage = min(distance / maxDistance, 1);
+    let powerCurve = 0.8; // Lower values create a steeper curve (harder to reach max)
+    let adjustedPower = pow(powerPercentage, powerCurve);
+    
+    // Reduce the overall power multiplier to make shots less powerful
+    let power = adjustedPower * 0.15; // Reduced from 0.2 to 0.15
     
     // Reduce power if in sand
     if (in_hazard && hazard_type === 'sand') {
@@ -3073,6 +3267,15 @@ function mouseReleased() {
       let scale = minVelocity / max(abs(ball_vx), abs(ball_vy));
       ball_vx *= scale;
       ball_vy *= scale;
+    }
+    
+    // Add a maximum velocity cap to prevent extremely powerful shots
+    let maxVelocity = 12;
+    let currentVelocity = sqrt(ball_vx * ball_vx + ball_vy * ball_vy);
+    if (currentVelocity > maxVelocity) {
+      let reductionFactor = maxVelocity / currentVelocity;
+      ball_vx *= reductionFactor;
+      ball_vy *= reductionFactor;
     }
     
     // Force the ball into the air state regardless of velocity
